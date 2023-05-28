@@ -1,0 +1,623 @@
+---
+title: "TIME SERIES ANALYSIS - ASS1"
+author: "Vishal Patnaik Damodarapatruni - s3811521"
+date: "13/04/2021"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+
+Ozone (O3) is present as a layer within Earth’s atmosphere with some thickness which absorbs the UV rays from the Sun. Higher the thickness the greater will be the absorbsion of the UV rays by the layer. [1] Ritchie and Roser (2020)
+
+Here, the thickness of the Ozone layer is analysed and modelling is done on the Time Series data. The data is the yearly change in the thickness of the Ozone layer over a period of 90 years i.e., from 1927 to 2016. The date has both negative and positive values, decrease in the thickness is indicated in negative values whereas increase in positive values.
+
+In this analysis, time series techniques are applied to the data and the best model among several models is selected to predict the thickness change in future (i.e., say for example 5 years). This helps both the public and environmental government to understand how the state of the Ozone layer is going to be in future.
+
+# Scope
+
+This analysis has two parts: 
+    Part 1: Regression
+    Part 2: Time series approach.
+
+## Part 1:
+
+Finding the best model among Linear, Quadratic, Cosine, Cyclical or Seasonal trend models.
+
+Using the best fit model, the data for the next 5 years is predicted.
+
+## Part 2:
+
+Here, possible ARIMA(p, d, q) models are propossed using model specification tools like ACF-PACF, EACF and BIC.
+
+# Method
+
+Using the below packages (TSA, tseries, funitRoots etc.) the time series data is visualised and the best model selected is fitted on the data. This model selection is justified by model specification tools like ACF-PACF, EACF and BIC table.
+
+```{r Library}
+library(TSA) # Time Series Analysis.
+library(tseries) # Time Series Analysis and Computational Finance.[2] - https://cran.r-project.org/web/packages/tseries/index.html
+library(fUnitRoots) # To analyze trends and unit roots in financial time series. [3] - https://cran.r-project.org/web/packages/fUnitRoots/index.html
+library(dplyr)
+```
+
+# Data
+
+The data is the yearly change in the thickness of the Ozone layer over a period of 90 years i.e., from 1927 to 2016. The date has both negative and positive values, decrease in the thickness is indicated in negative values whereas increase in positive values. The dataset is in csv format and hence it is loaded using "read.csv()" function.
+
+```{r DataLoading}
+v_ozone_thickness <- read.csv("data1.csv", header = FALSE)
+head(v_ozone_thickness)
+```
+
+V1 - Thickness change in ozone layer. 
+Now, let us add years from 1927 to 2016 as row names. So that each values of V1 corresponds to the change in thickness of Ozone layer in that respective year.
+
+```{r rownames}
+rownames(v_ozone_thickness) <- seq(from=1927, to=2016)
+head(v_ozone_thickness)
+```
+
+Checking the class of v_ozone_thickness. (It should be data frame.)
+
+```{r class}
+class(v_ozone_thickness)
+```
+
+Now convert the dataframe into a time series object.
+
+```{r TS}
+v_ozone_thickness_1 <- ts(as.vector(as.matrix(t(v_ozone_thickness))), start = 1927, end = 2016, frequency = 1)
+```
+
+Checking the class of v_ozone_thickness_1. (It should be time series.)
+
+```{r TS_Class}
+class(v_ozone_thickness_1)
+```
+
+As we got the time series object now let us visualize it.
+
+```{r plotfun}
+# Function to plot a single data.
+v_Plot <- function(v, m){
+  plot(v, type = "b", pch = 19, col = "blue", xlab = "years", ylab = "Thickness", main = m)
+}
+```
+
+```{r legend1}
+# Function to form a legend corresponding to a single data plot.
+v_leg1 <- function(t, l, c, p){
+  legend("bottomleft", inset = .03, title = t, legend = l, col = c, horiz = TRUE, cex = 0.8, lty = 1, box.lty = 2, box.lwd = 2, box.col = "blue", pch = p)
+}
+```
+
+```{r plotTS}
+v_Plot(v_ozone_thickness_1, "Ozone layer thickness change from 1927 to 2016 in Dobson units")
+v_leg1("Ozone layer Thickness change over years.", c("Thickness Change"), c("blue"), c(19))
+```
+
+Fig 1: Ozone layer thickness change - Time series plot.
+
+## Descriptive analysis
+
+Also, let us analyse the descriptive statistics on the data.
+
+```{r OTS}
+OTS <- v_ozone_thickness %>% summarise(Min = min(`V1`, na.rm = TRUE),
+                             SD = sd(`V1`, na.rm = TRUE),
+                             Q1 = quantile(`V1`, probs = .25, na.rm = TRUE),
+                             Median = median(`V1`, na.rm = TRUE),
+                             Mean = mean(`V1`, na.rm = TRUE),  
+                             IQR = IQR(`V1`, na.rm = TRUE),
+                             Q3 = quantile(`V1`, probs = .75,na.rm = TRUE),
+                             Max = Q3 + 1.5 * IQR,
+                             Missing = sum(is.na(`V1`)))
+
+knitr::kable(OTS, caption = "Statistics for Ozone Layer Thickness Data")
+```
+
+From the plot we can observe that, 
+
+The data follows a downward trend. This suggests that the ozone layer is depleting over years.
+
+There is no seasonality in the trend.
+
+We can also absorb some intervention in the just before 1990. According to research Ozone layer depletion is more at that time. [4] -https://rpubs.com/tenzingsangay0/485978
+
+```{r plotfun2}
+# Function to plot using two different data (Scatter Plot).
+
+v_Plot1 <- function(v, v1, x, y, m){
+  plot(x = v, y = v1, pch = 19, col = "blue", xlab = x, ylab = y, main = m)
+}
+```
+
+```{r legend2}
+# Function to form a legend corresponding to a two data plot.
+
+v_leg <- function(t, l){
+  legend("topleft", inset = .03, title = t, legend = c(l), col = c("blue"), horiz = TRUE, cex = 0.8, box.lty = 2, box.lwd = 2, box.col = "blue", pch = c(19))
+}
+```
+
+The relatibility of the data over years can be understood by analysing Scatterplot and correlation coefficient in the further analysis.
+
+## Scatter Plot and Correlation.
+
+### Scatterplot
+
+```{r ScatterTS}
+v_data_lag = zlag(v_ozone_thickness_1) # First lag of Ozone layer thickness series generation.
+
+v_Plot1(v_data_lag, v_ozone_thickness_1, "Thickness change in previous years.", "Thickness change", "Scatter plot for Ozone Layer Thickness in Dobson units.")
+v_leg("Ozone layer Thickness change over years.", "Thickness Change.")
+```
+
+Fig 1: Ozone layer thickness change - Scatterplot.
+
+The relationship seems to be almost linear. This might be due to the skewness in the variables. We can transform the data but here it seemed to be an inefficient process as the results and analysis might mis-lead. I checked it and decided not to transform the data .
+
+### Correlation
+
+```{r cor}
+i = 2 : length(v_data_lag) # Creating index by negletting first null values.
+cor(v_ozone_thickness_1[i], v_data_lag[i]) # Calculating the correltion coefficient.
+```
+
+The data of one year is correlated to the data of other years. The correlation coefficient "0.8700381" proves this.
+
+# Task 1
+
+## Model building strategy
+
+Model specification.
+Model fitting.
+Model diagnostics.
+
+Model specification:
+
+From the scatter plot we can observe a linear possitive relationship. So, Linear regreassion might be a better choice. Now let us fit a Simple linear regression model on the data.
+
+## Simple linear regression
+
+The deterministic model trend:
+        μt = β0 + β1t
+where:
+        β0 = Intercept      β1 = Slope of Linear Trend
+
+Model fitting:
+
+```{r LMTS}
+v_time <- time(v_ozone_thickness_1)
+V_LM = lm(v_ozone_thickness_1 ~ v_time)
+summary(V_LM)
+```
+
+Let us interpret the visualisation of the data with linear regression line.
+
+```{r LMplot}
+v_Plot(v_ozone_thickness_1, "Ozone Layer Thickness change in Dobson units - Simple Linear Model")
+abline(V_LM, lty = 1, col = "red")
+v_leg1("Ozone layer Thickness change over years.", c("Thickness change", "Linear Model"), c("blue", "Red"), c(19, NA))
+```
+
+Fig 3: Thickness change - Simple Linear model.
+
+```{r LMSummary}
+summary(V_LM)
+```
+
+Hypotheses :
+H0 : The data doesn′t fit the simple linear regression model.
+HA : The data fits the simple linear regression model.
+
+Interpretations:
+
+The adjusted test statistic "t = -13.34".
+R - squared is 0.6693.
+Adjusted R - squared is 0.6655.
+Degrees of freedom - DF are (1, 88)
+p - value is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected.
+Hence, the model fits the simple linear regression model.
+Slope β1 = −0.110029, which suggests the mean is not constant and the data is not stationary.
+Also, there is a trend in data as the slope is significant.
+As the slope is negative the plot shows a negative or downward trend.
+
+This model suggests that there is a 66.93% of data variance. Suggesting that the model explains only 66.93% of the trend. Which implies that the model shows some trend.
+
+Model diagnostics:
+
+Now let us check whether the model is the best fit on the data or not. This can be checked by analysing the residuals and perfoming a Shapiro test.
+Note: For a best fit model, a true stochastic nature and normality should be seen in the residuals. 
+
+Analyzing the residuals of Simple linear model trend:
+
+```{r analysisfunc}
+# Function for residual analysis.
+
+v_analysis <- function(res_m) {
+  
+    # Scatter plot for model residuals
+    plot(res_m, type = "b", pch = 19, col = "blue", xlab = "years", ylab = "Standardized Residuals", main = "Plot of Residuals over Time")
+
+    abline(h = 0)
+    
+    # Standard distribution
+    hist(res_m, xlab = 'Standardized Residuals', freq = FALSE, ylim = c(0, 0.6))
+    curve(dnorm(x, mean = mean(res_m), sd = sd(res_m)), col = "red", lwd = 2, add = TRUE, yaxt = "n")
+    
+    # QQplot for model residuals
+    qqnorm(res_m, col = c("blue"))
+    qqline(res_m)
+    
+    # Auto-Correlation Plot
+    acf(res_m, main = "ACF of Standardized Residuals",col=c("blue"))
+}
+```
+
+```{r LM_Analysis}
+# Displaying both Mean and Standard deviation of LM.
+sprintf("Mean : %f & Standard Deviation : %f", mean(rstudent(V_LM)), sd(rstudent(V_LM)))
+v_analysis(rstudent(V_LM))
+```
+Sctterplot of residuals over time analysis.
+Fig 4: Scatter plot of linear model residual.
+
+The data points are below the line at both the start and end of the trend. Randomness is not seen in the scatterplot due to similarity in the residuals. So, we cannot decide anything at this stage. Further analysis is required.
+
+Distribution analysis.
+Fig 5: Distribution of standardized residuals from linear model.
+
+Almost symetric. This suggests a good fit with a very few data falling outside the normal curve indicating Kurtosis.
+
+QQ plot analysis.
+Fig 6: QQ Plot of linear model residuals.
+
+There is no White noice as at the tails the data is away from the normal with a small deviation in the middle.
+
+Auto-Correlation Plot
+Fig 7: Auto-Correlation Plot of linear model residuals
+
+The correlation values are higher than the confidence bound at lag 1. 
+Overall, nearly 3 values are above the dotted line suggesting that the stochastic component is not white noice.
+
+Now let us conduct a Shapiro test to check whether the stochastic component is normally distributed or not.
+
+Shapiro-Wilk normality test:
+
+Hypotheses :
+H0 : The stochastic component is normally distributed.
+HA : The stochastic component is not normally distributed.
+
+```{r test1}
+shapiro.test(rstudent(V_LM))
+```
+
+Interpretation:
+P - value = 0.5372 > 0.05 (not statistically significant)
+Therefore, we fail to reject Null hypothesis.
+Hence, the stochastic component is normally distributed.
+
+Model specification:
+Now let us again use the Model building strategy. Since, Linear Regression is our choice now let us fit data on Quadratic regression.
+
+## Quadratic regression
+
+The deterministic model trend:
+
+μt = β0 + β1t + β2t2
+
+Model fitting:
+
+```{r QuadM}
+v_time2 = v_time ^ 2
+V_QM = lm(v_ozone_thickness_1 ~ (v_time + v_time2))
+```
+
+```{r quadplot}
+plot(ts(fitted(V_QM)), ylim = c(min(c(fitted(V_QM), as.vector(v_ozone_thickness_1))), max(c(fitted(V_QM),as.vector(v_ozone_thickness_1)))), col = "red", xlab = "years", ylab = "Thickness change", main = "Quadratic Curve (Fitted) of Ozone layer Thickness change - Quadratic Model")
+lines(as.vector(v_ozone_thickness_1), type = "b", col = "blue", pch = 19)
+v_leg1("QuadPlot", c("Time Series Plot", "Quadratic Trend Line"), c("blue", "red"), c(19, NA))
+```
+
+Fig 8: Thickness change - Quadratic model.
+
+```{r QMSummary}
+summary(V_QM)
+```
+
+Hypotheses :
+H0 : The data doesn′t fit the Quadratic model.
+HA : The data fits the Quadratic model.
+
+Interpretations:
+
+The adjusted test statistic "t = 13.34".
+R - squared is 0.7391.
+DF - (2, 87)
+p - value is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected.
+Hence, the model fits the Quadratic model.
+
+This model suggests that there is a 73.91% of change in data or variance. This implies model explains 73.91% of the trend, Which is greater than Simple Linear model.
+
+Model diagnostics:
+
+Now let us check whether the model is the best fit on the data or not. This can be checked by analysing the residuals and perfoming a Shapiro test.
+
+Note: For a best fit model, a true stochastic nature and normality should be seen in the residuals. 
+
+Analyzing the residuals of Quadratic model trend:
+
+```{r QM_Analysis}
+# Displaying both Mean and Standard deviation of QM.
+sprintf("Mean : %f & Standard Deviation : %f", mean(rstudent(V_QM)), sd(rstudent(V_QM)))
+v_analysis(rstudent(V_QM))
+```
+
+Sctterplot of residuals over time analysis.
+Fig 9: Scatter plot of quadratic model residual.
+
+The data points are above the line at both the start and the end of the trend. The variance looks constant. Here also randomness is not seen. So, we cannot decide anything at this stage. Further analysis is required. 
+
+Distribution analysis.
+Fig 10: Distribution of standardized residuals from quadratic model.
+
+Almost symetric but comparitively less than simple linear regression. This suggests a good fit with a very few data falling outside the normal curve indicating Kurtosis.
+
+QQ plot analysis.
+Fig 11: QQ Plot of quadratic model residuals.
+
+There is no White noice as at the tails the data is away from the normal with a small deviation in the middle which is better than simple linear regression.
+
+Auto-Correlation Plot
+Fig 12: Auto-Correlation Plot of quadratic model residuals
+
+With significant correlation values the models shows some trend at 1, 3 and 4 lags.
+
+Now let us conduct a Shapiro test to check whether the stochastic component is normally distributed or not.
+
+Shapiro-Wilk normality test:
+
+Hypotheses :
+H0 : The stochastic component is normally distributed.
+HA : The stochastic component is not normally distributed.
+
+```{r Test2}
+shapiro.test(rstudent(V_QM))
+```
+
+Interpretation:
+P - value = 0.6493 > 0.05 (not statistically significant)
+Therefore, we fail to reject Null hypothesis.
+Hence, the stochastic component is normally distributed.
+
+Model specification:
+
+Firstly, the data is linear. This is found from the scatter plot which showed a positive linear relationship or linear positivity. Hence, the data doesn't fit Seasonal / Cyclic or Cosine models.
+
+More precisely,
+
+Since the data is in years there will be no seasonal trend.
+
+The data is checked for a 7 year period for any cycles or paterns by setting the frequency to 7.
+
+```{r Cosine}
+v_seven = ts(v_ozone_thickness_1, frequency = 7)
+
+ts_plot1 = plot(v_seven, type = 'l',
+                main ="Time series plot of the yearly changes in thickness of Ozone layer",
+                ylab = "Change in Ozone thickness",
+                xlab = "7 years cycle", col = "blue")
+v_leg1("Ozone layer thickness change - 7 year cycle.", c("Thickness change - 7 years"), c("blue"), c(19))
+
+v_cycle = factor(rep(1 : 7, length.out = length(v_seven)), ordered = TRUE)
+points(y = v_seven, x = time(v_seven), pch = as.character(v_cycle), col = 2, cex = 1.15)
+```
+
+Fig 13: Seven year cycle check for cosine model.
+
+From the plot we can observe that there are no patterns in the data.
+
+Therefore, the data doesn't fit the Cosine model either.
+
+## Model analysis Summary:
+
+The residuals of both simple linear and quadratic are normally distributed and have significant auto-correlation.
+Among all the models Quadratic model which explains a variance of 73.91% can be considered as a best fit.
+The degress of freedom (s) is smaller for Quadratic model. This adds evidence that quadratic model is best.
+Even though Quadratic model is performed best, it did not shown the complete trend in the series data. Also the model failed to perform well in the residual analysis.
+Therefore further analysis is to be made in the part 2 using ARIMA model and model specific tools.
+But at this point Quadratic model is the best model and the future data can be predicted using it.
+
+## Future predictions.
+
+Thickness change for the next five years (2017 - 2021):
+
+```{r Forecast}
+h = 5
+new = data.frame(v_time = seq((max(v_time) + 1), (max(v_time) + h), 1))
+new$v_time2 = new$v_time^2
+
+# Predicting from new data.
+v_pred = predict(V_QM, new, interval = "prediction")
+
+# Based on the prediction forming new data table for the next five years.
+v_pred_tab = data.frame(Year = seq(2017, 2021, 1), v_pred)
+colnames(v_pred_tab) = c("Year", "Prediction", "LowerCI", "UpperCI")
+head(v_pred_tab)
+```
+
+Plotting the predicted data.
+
+```{r PlotForecast}
+#graphing it out
+plot(v_ozone_thickness_1, type = 'o',
+     main ="Next 5 year thickness change prediction using Quadratic model.",
+     ylab = "Thickness change",
+     xlab = "Years",
+     xlim = c(1927, 2021),
+     ylim = c(-15, 4), 
+     col = c("blue"), pch = c(19))
+
+lines(ts(as.vector(v_pred[, 1]), start = 2017), col = "red", type = "l") 
+lines(ts(as.vector(v_pred[, 2]), start = 2017), col = "blue", type = "l") 
+lines(ts(as.vector(v_pred[, 3]), start = 2017), col = "blue", type = "l")
+
+v_leg1("Forecast", c("Data", "Forecast limits", "Forecasts"), c("blue", "blue", "red"), c(NA, NA, NA))
+```
+
+Fig 14: Next 5 year forecast on the change in thickness in ozone layer.
+
+From the five year forecast results we can predict that there will be depletion in the ozone layer in the future.
+
+# Task 2: Auto Regressive Integrated Moving Average - ARMA model.
+
+In this section, using suitable model specifications a set of possible ARIMA(p, d, q) models are proposed.
+
+## Testing for stationary
+
+In the previous task as the Quadratic model which followed a downward trend, implies now - stationary. Also the auto regressive behavior is implied in the subsequent behavior of the data.
+
+Analysing trends by plotting ACF and PACF.
+
+```{r ACF}
+acf(v_ozone_thickness_1, ci.type = 'ma', main = "Thickness change - ACF")
+```
+
+Fig 15: Thickness change with sophisticated error bonds - ACF
+
+```{r PACF}
+pacf(v_ozone_thickness_1, main = "Thickness change - PACF")
+```
+
+Fig 16: Thickness change - PACF
+
+The gradually decreasing ACF and PACF with a high peak at the start indicated the presence of a pattern from the previous study.
+
+```{r lagADF}
+# Lag for ADF test
+ar(v_ozone_thickness_1)
+```
+
+Conducting Augmented Dickey-Fuller tests with 4 lags.
+
+```{r ADFtest}
+adfTest(v_ozone_thickness_1, lags = 4, type = "nc", title = 'No constant nor Time Trend')
+adfTest(v_ozone_thickness_1, lags = 4, type = "c", title = 'With Constant but no Time Trend')
+adfTest(v_ozone_thickness_1, lags = 4, type = "ct", title = 'With constant and Time Trend')
+```
+
+
+Hypotheses :
+H0 : The data is not stationary.
+HA : The data is stationary.
+
+Interpretations:
+
+No constant and no Time Trend:
+p - value - 0.7942 > 0.5 
+With constant but no Time Trend:
+p - value - 0.8924 > 0.5
+With constant and Time Trend:
+p - value - 0.0867 > 0.5
+
+In all the 3 cases p - value is greater than 0.5 and hence the test is not statistically significant. Therefore, we fail to reject Null hypothesis i.e., The data is not stationary.
+
+Changing variance or applying transformation.
+
+As the initial data has no change in variance, let us check whether applying transfomation on the data reduces its variance.
+
+```{r BoxCox, warning= FALSE}
+# Checking for Box_Cox transformation with best lambda
+v_BoxCox <-  BoxCox.ar(v_ozone_thickness_1 + 13)
+title(main = "Log-likelihood vs Lambda values.")
+```
+
+Fig 17: Finding the best lambda
+
+As the lambda confidence interval includes 1. There is no need to apply transformation on the data. This is already stated in visual analysis in the first part.
+
+## Differencing the data to make data stationery.
+
+As no transformation is required, let us take the first difference of the data to make the data stationary.
+
+```{r diff}
+v_diff = diff(v_ozone_thickness_1)
+
+# Plot - First difference.
+v_Plot(v_diff, "Differenced data of initial thickness change in Ozone layer.")
+v_leg("Differenced thickness change over years.", c("First ever differenced thickness Change"))
+```
+
+Fig 18: Change in thickness of ozone layer - First difference.
+
+The data seems to be a stationary. To check whether the data is stationary or not apply ADF test. For this it is required to identify the lag on the first differenced data.
+
+```{r lag}
+ar(v_diff)
+```
+
+As, order/lags = 6. Conduct Augmented Dickey-Fuller tests on differenced data with 6 lags.
+
+```{r ADFtest1}
+#conducting the ADF tests
+adfTest(v_diff, lags = 6, type = "nc", title = 'No constant nor Time Trend')
+adfTest(v_diff, lags = 6, type = "c", title = 'With Constant but no Time Trend')
+adfTest(v_diff, lags = 6, type = "ct", title = 'With constant and Time Trend')
+```
+
+
+Hypotheses :
+H0 : The data is non - stationary.
+HA : The data is stationary.
+
+Interpretations:
+
+No constant and no Time Trend:
+p - value ~ 0.01 < 0.5 
+With constant but no Time Trend:
+p - value ~ 0.01 < 0.5
+With constant and Time Trend:
+p - value ~ 0.01 < 0.5
+
+P - value rounded to 0.01 as it is very small (exponential value.)
+
+In all the 3 cases p - value is less than 0.5 and hence the test is statistically significant. The Null hypothesis i.e., "the data is not stationary" can be rejected. Therefore, the data is stationary.
+
+## Using model specific tools on differenced ozone data for model determination (ARIMA orders).
+
+### Using ACF and PACF
+
+```{r ACF1}
+acf(v_diff, main = "Ozone layer thickness first difference data - ACF")
+```
+
+Fig 20: Differenced data - ACF
+
+```{r PACF1}
+pacf(v_diff, main = "Ozone layer thickness first difference data - PACF")
+```
+
+## Using EACF
+
+```{r EACF}
+#calculating the eacf
+eacf(v_diff, ar.max = 6, ma.max = 9)
+```
+
+## Using BIC
+
+```{r BIC}
+#creating the BIC plot
+res = armasubsets(v_diff, nar = 9, nma = 9, y.name = 'ar', ar.method = 'ols')
+plot(res)
+title(main = "Thickness difference - BIC", line = 6)
+```
+
+# Conclusion

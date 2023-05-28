@@ -1,0 +1,1006 @@
+---
+title: "Time Series"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Introduction
+
+The aim of this analysis is to predict the unemployment rate in United States of America based on the data released by U.S Department of Labor, which is also known as the Bureau of Labor Statistics (BLS). The Labor Bureau has been collecting the unemployment rate data since 1948 to present, to analyze the effect of employment due to external factors like recessions. This rate represents the percentage of the labor force who are unemployed and this rate is also defined as the U-3 measure of labor under utilization. 
+
+A detailed analysis is done using different time series techniques to identify the best model which predicts the future unemployment rate in U.S.
+
+# Scope
+
+In this project, we are going to analyse different trends in the data to identity the suitable model. Also, the orders (p, d, q) if required are identified using the model specification tools. Then, we integrate the GARCH model with the best ordered (p, d, q) model to finalize the best model which fits the data. With this resultant model we are going to predict the forecast of unemployment rate in U.S.
+
+# Method
+
+Here we used R language built in pakages like TSA, fUnitRoots, forecast, tsereies, etc., and model specification tools to identify the models which predict the forecast.
+
+# Data:
+
+The data used here to predict the future unemployment rate is recorded by U.S Bureau of Labor Statistics, this time series data is released every year by the Labor Bureau since 1948 by conducting Current Population Survey (Household Survey) in United States of America. This data has two variables namely Data and Rate (measured in percentage).
+
+Importing the required packages.
+
+```{r pakages, echo = FALSE}
+library(TSA)
+library(fUnitRoots)
+library(forecast)
+library(CombMSC)
+library(lmtest)
+library(fGarch)
+library(rugarch)
+library(tseries)
+library(FitAR)
+```
+
+Importing the data from CSV file to dataframe.
+
+```{r data, echo = FALSE}
+UNRATE <- read.csv("UNRAT.csv", header = TRUE)
+```
+
+
+DATE variable is changed to DATE format and converted as rownames. 
+
+```{r, echo = FALSE}
+UNRATE$DATE <- as.Date(UNRATE$DATE)
+
+rownames(UNRATE) <- UNRATE$DATE
+UNRATE <- within(UNRATE, rm(DATE))
+```
+
+
+Here, the dataframe is converted to Time Series(ts) object.
+
+```{r TS, echo = FALSE}
+UNRATE_TS <- ts(as.vector(as.matrix(t(UNRATE))), start = 1948, end = 2021)
+```
+
+Plotting the time series data for better understanding.
+
+```{r plotfun, echo = FALSE}
+# Function to plot a single data.
+v_Plot <- function(v, m){
+  plot(v, type = "b", pch = 19, col = "blue", xlab = "years", ylab = "Unemployement Rate", main = m)
+}
+```
+
+```{r legend1, echo = FALSE}
+# Function to form a legend corresponding to a single data plot.
+v_leg1 <- function(t, l, c, p){
+  legend("topright", inset = .03, title = t, legend = l, col = c, horiz = TRUE, cex = 0.8, lty = 1, box.lty = 2, box.lwd = 2, box.col = "blue", pch = p)
+}
+```
+
+
+```{r plotTS, echo = FALSE}
+v_Plot(UNRATE_TS, "Unemployement rate from 1948 to 2021")
+v_leg1("Unemployement Rate over years.", c("Unemployement Rate"), c("blue"), c(19))
+```
+
+Fig 1: Unemployment rate from 1960 to 2021 - Time series plot.
+
+
+```{r plotfun2, echo = FALSE}
+# Function to plot using two different data (Scatter Plot).
+
+v_Plot1 <- function(v, v1, x, y, m){
+  plot(x = v, y = v1, pch = 19, col = "blue", xlab = x, ylab = y, main = m)
+}
+```
+
+```{r legend2, echo = FALSE}
+# Function to form a legend corresponding to a two data plot.
+
+v_leg <- function(t, l){
+  legend("bottomright", inset = .03, title = t, legend = c(l), col = c("blue"), horiz = TRUE, cex = 0.8, box.lty = 2, box.lwd = 2, box.col = "blue", pch = c(19))
+}
+```
+
+
+
+```{r MT, echo = FALSE}
+McLeod.Li.test(y = UNRATE_TS, main = "McLeod-Li Test Statistics for U.S unemployment rate")
+# McLeod-Li test is significnat at 5% level of significance for all lags. This gives a strong idea about existence of volatiliy clustering.
+```
+Fig 1: McLeod-Li Test Statistics for U.S unemployment rate.
+
+McLeod-Li test is significant at 5% level of significance for all lags suggesting volatility clustering.
+
+## Descriptive analysis
+
+1.	From fig1, we can observe an upward trend in the plot until 1970 and from then we can see downward trend. By this we can say that there is no trend in the plot.
+2.	This series shows Autoregressive and moving average behaviour.
+3.	From the plot, we can conclude that there is no seasonality in the series. 
+4.	From the time series plot and McLeod-Li test, we can see change in variance.
+
+
+## Model Building Strategy:
+
+1.	Model Specification
+2.	Model Fitting
+3.	Model Diagnostics.
+
+### Model Specification:
+
+Since the series has autoregressive and moving average behaviour, AR/MA model fits the series. Also, we choose AR/MA + GARCH model to fit the series as the series has a change in variance.
+Let us check whether the data is stationary or not because to fit the AR/MA model, the data should be in stationary.
+
+
+#### Testing for stationary
+
+Let us analyse ACF and PACF plots.
+
+```{r ACF, echo = FALSE}
+acf(UNRATE_TS, main = "Unemployment rate - ACF")
+```
+Fig 3: ACF plot for U.S unemployment rate.
+
+```{r PACF, echo = FALSE}
+pacf(UNRATE_TS, main = "Unemployment rate - PACF")
+```
+
+Fig 4: PACF plot for U.S unemployment rate.
+
+In both ACF and PACF, we can observe high peak at the first lag and significant lags are in decomposition pattern in ACF plot. 
+
+Running Augmented Dickey-Fuller tests on series data.
+
+```{r ADFtest, echo = FALSE}
+adfTest(UNRATE_TS)
+```
+
+
+Hypotheses :
+H0 : The data is not stationary.
+HA : The data is stationary.
+
+Interpretations:
+p - value - 0.65 > 0.05
+
+Since, p - value is greater than 0.05, the test is not statistically significant. Thereby, we fail to reject Null hypothesis i.e., The data is not stationary.
+
+Let's apply transformation on the data to check whether the change in variance is decreasing or not.
+
+Applying Box_Cox transformation,
+
+```{r BoxCox, warning= FALSE, echo = FALSE}
+UNRATE_TS_1 <-  BoxCox.ar(UNRATE_TS + 1)
+title(main = "Log-likelihood vs Lambda values")
+```
+
+Fig 5: Log-likelihood vs Lambda values
+
+Change in variance is decreased. Now, let us calculate the best lambda.
+
+
+```{r BoxCox1, warning= FALSE, echo = FALSE}
+# Checking for Box_Cox transformation with best lambda
+lambda = UNRATE_TS_1$lambda[which(max(UNRATE_TS_1$loglike) == UNRATE_TS_1$loglike)]
+UNRATE_TS_BC = ((UNRATE_TS^lambda) - 1) / lambda
+```
+
+Running shapiro test to check the normality,
+
+```{r st, echo = FALSE}
+shapiro.test(UNRATE_TS_BC)
+```
+
+p-value = 0.02 < 0.05
+
+Since, p - value is less than 0.05, the test is statistically significant at 95% confidence intervals. Thereby, Null hypothesis can be rejected i.e., data is normalized.
+
+Running ADF test,
+
+```{r ADFtest1, echo = FALSE}
+adfTest(UNRATE_TS_BC)
+```
+
+
+Hypotheses :
+H0 : The data is not stationary.
+HA : The data is stationary.
+
+Interpretations:
+p - value - 0.67 > 0.05
+
+Since, p - value is greater than 0.05, the test is not statistically significant. Thereby, we fail to reject Null hypothesis i.e., The data is not stationary.
+
+Since the data is not stationary, we are differencing the data to order 1 i.e., d=1.
+
+```{r diff, echo = FALSE}
+UNRATE_diff = diff(UNRATE_TS)
+
+# Plot - First difference.
+v_Plot(UNRATE_diff, "Differenced data of unemployment rate in U.S.")
+v_leg("Differenced unemployment rate over the years.", c("First ever differenced data"))
+```
+
+Fig 6: Differenced series of unemployment rate.
+
+Applying ADF test,
+
+
+```{r ADF, echo = FALSE}
+adfTest(UNRATE_diff)
+```
+
+
+Hypotheses :
+H0 : The data is not stationary.
+HA : The data is stationary.
+
+Interpretations:
+
+p - value ~ 0.01 < 0.5
+
+P - value rounded to 0.01 as it is very small (exponential value.)
+
+Since, p - value is less than 0.05, the test is statistically significant at 95% confidence intervals. Thereby, Null hypothesis can be rejected i.e., data is stationary.
+
+## Order Specification
+
+### Using ACF and PACF
+
+```{r ACF1, echo = FALSE}
+acf(UNRATE_diff, main = "Unemployment rate first difference data - ACF")
+```
+Fig 7: Unemployment rate first difference data - ACF
+
+```{r PACF1, echo = FALSE}
+pacf(UNRATE_diff, main = "Unemployment rate first difference data - PACF")
+```
+
+Fig 8: Unemployment rate first difference data - PACF
+
+The possible orders from ACF and PACF are,
+(0,1), (0,2), (0,3), (1, 0), (1,1), (1,2), (1,3), (2, 0), (2,1), (2,2), (2,3)
+
+## Using EACF
+
+```{r EACF, echo = FALSE}
+#calculating the eacf
+eacf(UNRATE_diff, ar.max = 6, ma.max = 9)
+```
+
+Possible orders from EACF, (3,2), (3,3), (3,4).
+
+## Using BIC
+
+```{r BIC, echo = FALSE}
+#creating the BIC plot
+res = armasubsets(UNRATE_diff, nar = 9, nma = 9, y.name = 'ar', ar.method = 'ols')
+plot(res)
+title(main = "Unemployement Rate - BIC", line = 6)
+```
+
+Possible orders from BIC, (3, 0), (2, 1).
+
+Overall possible ARMA orders are,
+
+(0,1), (0,2), (0,3), (1, 0), (1,1), (1,2), (1,3), (2, 0), (2,1), (2,2), (2,3), (3,2), (3,3), (3,4) and (3, 0).
+
+
+```{r analysisfunc, echo = FALSE}
+# Function for residual analysis.
+
+res_analysis <- function(res_m) {
+  
+    # Scatter plot for model residuals
+    plot(res_m, type = "b", pch = 19, col = "blue", xlab = "years", ylab = "Standardized Residuals", main = "Plot of Residuals over Time")
+
+    abline(h = 0)
+    
+    # Standard distribution
+    hist(res_m, xlab = 'Standardized Residuals', freq = FALSE, ylim = c(0, 0.6))
+    curve(dnorm(x, mean = mean(res_m), sd = sd(res_m)), col = "red", lwd = 2, add = TRUE, yaxt = "n")
+    
+    # QQplot for model residuals
+    qqnorm(res_m, col = c("blue"))
+    qqline(res_m)
+    
+    # Auto-Correlation Plot
+    acf(res_m, main = "ACF of Standardized Residuals",col=c("blue"))
+    
+    # Shapiro wilk test
+    print(shapiro.test(res_m))
+  
+    # Ljung box test
+    k=0
+    LBQPlot(res_m, lag.max = 30, StartLag = k + 1, k = 0, SquaredQ = FALSE)
+}
+```
+
+### Model Fitting and Diagnostics
+
+ARIMA(0,0,1)
+
+```{r, echo = FALSE}
+model_01_ml = arima(UNRATE_diff,order=c(0,0,1),method='ML')
+coeftest(model_01_ml)
+res_analysis(rstandard(model_01_ml))
+```
+Residual Analysis for ARIMA(0,0,1):
+
+1. p-value is greater than 0.05 for ma1.
+2. In Residual plot, the line is passing through 0. 
+3. From normal distribution curve, qq plot and Shapiro Walk test, we can see some normality in the data.
+4. There are significant lags in Autocorrelation plot.
+5. From Ljung box test, we can observe few significant lags.
+
+Therefore, it is not a good model for the data.
+
+
+ARIMA (0,0,2)
+
+
+```{r, echo = FALSE}
+model_02_ml = arima(UNRATE_diff,order=c(0,0,2),method='ML')
+coeftest(model_02_ml)
+res_analysis(rstandard(model_02_ml))
+```
+
+Residual Analysis for ARIMA(0,0,2):
+
+1. p-value is less than 0.05 for ma2. Thereby, it is significant.
+2. In Residual plot, the line is passing through 0. 
+3. From normal distribution curve, qq plot and Shapiro Walk test, we can see some normality in the data.
+4. There is only one significant lag in Autocorrelation plot.
+5. Ljung box test shows good results as all the dots are above the dotted line.
+
+Therefore, it can be considered as a good model for the data.
+
+
+ARIMA(0,0,3)
+
+```{r, echo = FALSE}
+model_03_ml = arima(UNRATE_diff,order=c(0,0,3),method='ML')
+coeftest(model_03_ml)
+res_analysis(rstandard(model_03_ml))
+```
+Residual Analysis for ARIMA(0,0,3):
+
+1. p-value is less than 0.05 for ma3. Thereby, it is significant.
+2. In Residual plot, the line is passing through 0. 
+3. From normal distribution curve, qq plot and Shapiro Walk test, we can see some normality in the data.
+4. There is only one significant lag in Autocorrelation plot.
+5. Ljung box test shows good results as all the dots are above the dotted line.
+
+Overall, it can be considered as a good model but comparatively, ARIMA(0,0,2) performed better as the coefficients of ARIMA(0,0,3) are less significant than the coefficients of ARIMA(0,0,2).
+
+
+ARIMA (1,0,0)
+
+
+```{r, echo = FALSE}
+model_10_ml = arima(UNRATE_diff,order=c(1,0,0),method='ML')
+coeftest(model_10_ml)
+res_analysis(rstandard(model_10_ml))
+```
+
+Residual Analysis for ARIMA(1,0,0):
+
+1. p-value is greater than 0.05 for ma1.
+2. In Residual plot, the line is passing through 0. 
+3. From normal distribution curve, qq plot and Shapiro Walk test, we can see some normality in the data.
+4. There are significant lags in Autocorrelation plot.
+5. From Ljung box test, we can observe few significant lags.
+
+Therefore, it is not a good model for the data.
+
+
+
+ARIMA (1,0,1)
+
+
+```{r, echo = FALSE}
+model_11_ml = arima(UNRATE_diff,order=c(1,0,1),method='ML')
+coeftest(model_11_ml)
+res_analysis(rstandard(model_11_ml))
+```
+
+Residual Analysis for ARIMA(1,0,1):
+
+1. p-value is greater than 0.05 for ar1 and ma1.
+2. In Residual plot, the line is passing through 0. 
+3. From normal distribution curve, qq plot and Shapiro Walk test, we can see some normality in the data.
+4. There are significant lags in Autocorrelation plot.
+5. From Ljung box test, we can observe few significant lags.
+
+Therefore, it is not a good model for the data.
+
+
+ARIMA (1,0,2)
+
+
+```{r, echo = FALSE}
+model_12_ml = arima(UNRATE_diff,order=c(1,0,2),method='ML')
+coeftest(model_12_ml)
+res_analysis(rstandard(model_12_ml))
+```
+
+Residual Analysis for ARIMA(1,0,2):
+
+1. p-value is less than 0.05 for ar1, ma1, and ma2. Hence, significant.
+2. In Residual plot, the line is passing through 0. 
+3. From normal distribution curve, qq plot and Shapiro Walk test, we can see some normality in the data.
+4. There are no significant lags in Autocorrelation plot.
+5. Ljung box test shows good results as all the dots are above the dotted line.
+
+Overall, it can be considered as a best model.
+
+
+ARIMA (1,0,3)
+
+
+```{r, echo = FALSE}
+model_13_ml = arima(UNRATE_diff,order=c(1,0,3),method='ML')
+coeftest(model_13_ml)
+res_analysis(rstandard(model_13_ml))
+```
+
+Residual Analysis for ARIMA(1,0,3):
+
+1. p-value is less than 0.05 for ar1, ma1 and ma2. Hence, significant.
+2. For ma3 p-value is greater than 0.05. Hence, not significant.
+3. In Residual plot, the line is passing through 0. 
+4. From normal distribution curve, qq plot and Shapiro Walk test, we can see some normality in the data.
+5. There are no significant lags in Autocorrelation plot.
+6. Ljung box test shows good results as all the dots are above the dotted line.
+
+Therefore, it can be considered as a good model but comparatively, ARIMA(1,0,2) performed better as the coefficients of ARIMA(1,0,3) are less significant than the coefficients of ARIMA(1,0,2).
+
+
+ARIMA (2,0,0)
+
+
+```{r, echo = FALSE}
+model_20_ml = arima(UNRATE_diff,order=c(2,0,0),method='ML')
+coeftest(model_20_ml)
+res_analysis(rstandard(model_20_ml))
+```
+
+
+Residual Analysis for ARIMA(2,0,0):
+
+1. p-value is greater than 0.05 for ar1 and less than 0.05 for ar2.
+2. In Residual plot, the line is passing through 0. 
+3. From normal distribution curve, qq plot and Shapiro Walk test, we can see some normality in the data.
+4. There is one significant lag in Autocorrelation plot.
+5. From Ljung box test, we can observe one dot touching the dotted line.
+
+Therefore, it is not a good model for the data.
+
+
+ARIMA (2,0,1)
+
+
+```{r, echo = FALSE}
+model_21_ml = arima(UNRATE_diff,order=c(2,0,1),method='ML')
+coeftest(model_21_ml)
+res_analysis(rstandard(model_21_ml))
+```
+Residual Analysis for ARIMA(2,0,1):
+
+1. p-value is less than 0.05 for ar1, ar2 and ma1. Hence, significant.
+2. In Residual plot, the line is passing through 0. 
+3. From normal distribution curve, qq plot and Shapiro Walk test, we can see some normality in the data.
+4. There are no significant lags in Autocorrelation plot.
+5. Ljung box test shows good results as all the dots are above the dotted line.
+
+Therefore, it can be considered as a good model but comparatively, ARIMA(1,0,2) performed better.
+
+
+ARIMA (2,0,2)
+
+
+```{r, echo = FALSE}
+model_22_ml = arima(UNRATE_diff,order=c(2,0,2),method='ML')
+coeftest(model_22_ml)
+res_analysis(rstandard(model_22_ml))
+```
+Residual Analysis for ARIMA(2,0,2):
+
+1. p-value is less than 0.05 for ar1, ma1 and ma2. Hence, significant.
+2. For ar2 p-value is greater than 0.05. Hence, not significant.
+3. In Residual plot, the line is passing through 0. 
+4. From normal distribution curve, qq plot and Shapiro Walk test, we can see some normality in the data.
+5. There are no significant lags in Autocorrelation plot.
+6. Ljung box test shows good results as all the dots are above the dotted line.
+
+Therefore, it can be considered as a good model but comparatively, ARIMA(1,0,2) performed better.
+
+
+ARIMA (2,0,3)
+
+
+```{r, echo = FALSE}
+model_23_ml = arima(UNRATE_diff,order=c(2,0,3),method='ML')
+coeftest(model_23_ml)
+res_analysis(rstandard(model_23_ml))
+```
+Residual Analysis for ARIMA(2,0,3):
+
+1. p-value is less than 0.05 for ar2, and ma3. Hence, significant.
+2. For ar1, ma1, and ma2, p-value is greater than 0.05. Hence, not significant.
+3. In Residual plot, the line is passing through 0. 
+4. From normal distribution curve, qq plot and Shapiro Walk test, we can see some normality in the data.
+5. There are no significant lags in Autocorrelation plot.
+6. Ljung box test shows good results as all the dots are above the dotted line.
+
+Therefore, it cannot be considered as a good model.
+
+
+ARIMA (3,0,0)
+
+
+```{r, echo = FALSE}
+model_30_ml = arima(UNRATE_diff,order=c(3,0,0),method='ML')
+coeftest(model_30_ml)
+res_analysis(rstandard(model_30_ml))
+```
+Residual Analysis for ARIMA(3,0,0):
+
+1. p-value is less than 0.05 for ar2, and ar3. Hence, significant.
+2. For ar1, p-value is greater than 0.05. Hence, not significant.
+3. In Residual plot, the line is passing through 0. 
+4. From normal distribution curve, qq plot and Shapiro Walk test, we can see some normality in the data.
+5. There are no significant lags in Autocorrelation plot.
+6. Ljung box test shows good results as all the dots are above the dotted line.
+
+Therefore, it cannot be considered as a good model.
+
+ARIMA (3,0,2)
+
+
+```{r, echo = FALSE}
+model_32_ml = arima(UNRATE_diff,order=c(3,0,2),method='ML')
+coeftest(model_32_ml)
+res_analysis(rstandard(model_32_ml))
+```
+
+Residual Analysis for ARIMA(3,0,2):
+
+1. p-value is less than 0.05 for ar2, and ar3. Hence, significant.
+2. For ar1, ma1 and ma2, p-value is greater than 0.05. Hence, not significant.
+3. In Residual plot, the line is passing through 0. 
+4. From normal distribution curve, qq plot and Shapiro Walk test, we can see some normality in the data.
+5. There are no significant lags in Autocorrelation plot.
+6. Ljung box test shows good results as all the dots are above the dotted line.
+
+Therefore, it cannot be considered as a good model.
+
+
+
+ARIMA (3,0,3)
+
+
+```{r, echo = FALSE}
+model_33_ml = arima(UNRATE_diff,order=c(3,0,3),method='ML')
+coeftest(model_33_ml)
+res_analysis(rstandard(model_33_ml))
+```
+
+Residual Analysis for ARIMA(3,0,3):
+
+1. p-value is less than 0.05 for ar2. Hence, significant.
+2. For ar1, ar3, ma1, ma2 and ma3, p-value is greater than 0.05. Hence, not significant.
+3. In Residual plot, the line is passing through 0. 
+4. From normal distribution curve, qq plot and Shapiro Walk test, we can see some normality in the data.
+5. There are no significant lags in Autocorrelation plot.
+6. Ljung box test shows good results as all the dots are above the dotted line.
+
+Therefore, it cannot be considered as a good model.
+
+
+ARIMA (3,0,4)
+
+
+```{r, echo = FALSE}
+model_34_ml = arima(UNRATE_diff,order=c(3,0,4),method='ML')
+coeftest(model_34_ml)
+res_analysis(rstandard(model_34_ml))
+
+```
+
+Residual Analysis for ARIMA(3,0,4):
+
+1. p-value is less than 0.05 for ar1, ar2, ar3, ma1 and ma4. Hence, significant.
+2. For ma2 and ma3, p-value is greater than 0.05. Hence, not significant.
+3. In Residual plot, the line is passing through 0. 
+4. From normal distribution curve, qq plot and Shapiro Walk test, we can see some normality in the data.
+5. There are no significant lags in Autocorrelation plot.
+6. Ljung box test shows good results as all the dots are above the dotted line.
+
+Therefore, it cannot be considered as a good model.
+
+
+```{r, echo = FALSE}
+sc.AIC=AIC(model_01_ml, model_02_ml, model_03_ml, model_10_ml, model_11_ml, model_12_ml, model_13_ml, model_20_ml, model_21_ml, model_22_ml, model_23_ml, model_30_ml, model_32_ml, model_33_ml, model_34_ml)
+```
+
+
+
+```{r, echo = FALSE}
+sort.score <- function(x, score = c("bic", "aic")){
+  if (score == "aic"){
+    x[with(x, order(AIC)),]
+  } else if (score == "bic") {
+    x[with(x, order(BIC)),]
+  } else {
+    warning('score = "x" only accepts valid arguments ("aic","bic")')
+  }
+}
+```
+
+
+```{r, echo = FALSE}
+sort.score(sc.AIC, score = "aic")
+```
+
+Overall, ARIMA(1,0,2) is the best model.
+
+Now over-fitting AR and MA,
+
+Over-fitting models: AR - ARMA(2, 0, 2)
+                     MA - ARMA(1, 0, 3)
+
+
+
+Over-fitting model - ARIMA (2,0,2)
+
+
+```{r, echo = FALSE}
+model_22_ml = arima(UNRATE_diff,order=c(2,0,2),method='ML')
+coeftest(model_22_ml)
+res_analysis(rstandard(model_22_ml))
+```
+Residual Analysis for ARIMA(2,0,2):
+
+1. p-value is less than 0.05 for ar1, ma1 and ma2. Hence, significant.
+2. For ar2 p-value is greater than 0.05. Hence, not significant.
+3. In Residual plot, the line is passing through 0. 
+4. From normal distribution curve, qq plot and Shapiro Walk test, we can see some normality in the data.
+5. There are no significant lags in Autocorrelation plot.
+6. Ljung box test shows good results as all the dots are above the dotted line.
+
+Therefore, it can be considered as a good model but comparatively, ARIMA(1,0,2) performed better.
+
+
+Over-fitting - ARIMA (1,0,3)
+
+
+```{r, echo = FALSE}
+model_13_ml = arima(UNRATE_diff,order=c(1,0,3),method='ML')
+coeftest(model_13_ml)
+res_analysis(rstandard(model_13_ml))
+```
+
+Residual Analysis for ARIMA(1,0,3):
+
+1. p-value is less than 0.05 for ar1, ma1 and ma2. Hence, significant.
+2. For ma3 p-value is greater than 0.05. Hence, not significant.
+3. In Residual plot, the line is passing through 0. 
+4. From normal distribution curve, qq plot and Shapiro Walk test, we can see some normality in the data.
+5. There are no significant lags in Autocorrelation plot.
+6. Ljung box test shows good results as all the dots are above the dotted line.
+
+Therefore, it can be considered as a good model but comparatively, ARIMA(1,0,2) performed better as the coefficients of ARIMA(1,0,3) are less significant than the coefficients of ARIMA(1,0,2).
+
+ARIMA (1, 0, 2) is best model compared to over-fitting models. Thereby, we are good to use (1, 0, 2) order in ARIMA model.  
+
+
+Absolute residuals to find the order for GARCH model,
+
+
+```{r, echo = FALSE}
+model_12_res = model_12_ml$residuals
+model_12_abs = abs(model_12_res)
+```
+
+
+```{r, echo = FALSE}
+par(mfrow=c(1,2))
+
+acf(model_12_abs, main = "The ACF plot for absolute residual series")
+pacf(model_12_abs, main = "The PACF plot for absolute residual series")
+```
+
+Possible orders from ACF and PACF, (0, 1), (1, 0), and (1, 1)
+
+```{r, echo = FALSE}
+eacf(model_12_abs, ar.max = 6, ma.max = 9)
+```
+
+Possible orders from EACF are (0, 1), (0, 2), (1, 1), and (1, 2).
+
+```{r, echo = FALSE}
+res = armasubsets(model_12_abs, nar = 9, nma = 9, y.name = 'ar', ar.method = 'ols')
+plot(res)
+title(main = "Unemployment rate - BIC", line = 6)
+```
+
+Possible orders from BIC are (0, 9) and (0, 8).
+
+Overall possible ARMA orders are (0, 1), (0, 2), (1, 0), (1, 1), (1, 2), (0, 9) and (0, 8).
+
+GARCH orders for above orders:
+ max(p,q) = 0 and q = 1 ==> max(p,1) = 0 and q = 1 ==> No models can be identified.
+ max(p,q) = 0 and q = 2 ==> max(p,2) = 0 and q = 2 ==> No models can be identified.
+ max(p,q) = 1 and q = 0 ==> max(p,0) = 1 and q = 0 ==> p can only be 1.
+ max(p,q) = 1 and q = 1 ==> max(p,1) = 1 and q = 1 ==> p can only be 1.
+ max(p,q) = 1 and q = 2 ==> max(p,2) = 1 and q = 2 ==> No models can be identified.
+ max(p,q) = 0 and q = 9 ==> max(p,9) = 0 and q = 9 ==> No models can be identified.
+ max(p,q) = 0 and q = 8 ==> max(p,8) = 0 and q = 8 ==> No models can be identified.
+
+GARCH models - GARCH(1, 0), GARCH(1, 1).
+
+Squared residuals to find the order for GARCH model,
+
+```{r, echo = FALSE}
+model_12_sq = model_12_res ^ 2
+```
+
+
+```{r, echo = FALSE}
+par(mfrow=c(1,2))
+
+acf(model_12_sq, main = "The ACF plot for squared residual series")
+pacf(model_12_sq, main = "The PACF plot for squared residual series")
+```
+
+Possible orders from ACF and PACF, (0, 1), (1, 0), and (1, 1)
+
+```{r, echo = FALSE}
+eacf(model_12_sq, ar.max = 6, ma.max = 9)
+```
+
+Possible orders from EACF are (0, 1), (0, 2), (1, 1), and (1, 2).
+
+```{r, echo = FALSE}
+res = armasubsets(model_12_sq, nar = 9, nma = 9, y.name = 'ar', ar.method = 'ols')
+plot(res)
+title(main = "Unemployment rate - BIC", line = 6)
+```
+
+Possible orders from BIC are (0, 8), (0, 4) and (6, 4).
+
+Overall possible ARMA orders are (0, 1), (0, 2), (1, 0), (1, 1), (1, 2), (0, 8), (0, 4) and (6, 4).
+
+GARCH orders for above orders:
+ max(p,q) = 0 and q = 1 ==> max(p,1) = 0 and q = 1 ==> No models can be identified.
+ max(p,q) = 0 and q = 2 ==> max(p,2) = 0 and q = 2 ==> No models can be identified.
+ max(p,q) = 1 and q = 0 ==> max(p,0) = 1 and q = 0 ==> p can only be 1.
+ max(p,q) = 1 and q = 1 ==> max(p,1) = 1 and q = 1 ==> p can only be 1.
+ max(p,q) = 1 and q = 2 ==> max(p,2) = 1 and q = 2 ==> No models can be identified.
+ max(p,q) = 0 and q = 8 ==> max(p,8) = 0 and q = 8 ==> No models can be identified.
+ max(p,q) = 0 and q = 4 ==> max(p,4) = 0 and q = 4 ==> No models can be identified.
+ max(p,q) = 6 and q = 4 ==> max(p,4) = 6 and q = 4 ==> p can only be 6.
+
+GARCH models - GARCH(1, 0), GARCH(1, 1) and GARCH(6, 4).
+
+Oveall GARCH models are, GARCH(1, 0), GARCH(1, 1) and GARCH(6, 4).
+
+Combining GARCH model with ARMA models we get ARMA + GARCH models, i.e., {ARMA(1,2) + GARCH(1,0), ARMA(1,2) + GARCH(1,1), ARMA(1,2) + GARCH(6,4)}
+
+ARMA(1,2) + GARCH(1,0):
+
+```{r, echo = FALSE}
+model_1210 <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(0, 1)), 
+                   mean.model = list(armaOrder = c(1, 2), include.mean = FALSE), 
+                   distribution.model = "norm")
+
+model_12_10 <- ugarchfit(spec = model_1210, data = UNRATE_diff)
+model_12_10
+
+res_analysis(model_12_10@fit$residuals)
+```
+
+
+Residual Analysis for ARMA(1,2) + GARCH(1,0):
+
+1. p-value is less than 0.05 for ar1, ma1, ma2, and beta1. Hence, significant.
+2. In Residual plot, the line is passing through 0. 
+3. From normal distribution curve, qq plot and Shapiro Walk test, we can see normality in the data.
+4. There are no significant lags in Autocorrelation plot.
+5. Ljung box test shows good results as all the dots are above the dotted line.
+
+Overall, it can be considered as a best model.
+
+
+ARMA(1,2) + GARCH(1,1):
+
+```{r, echo = FALSE}
+model_1211 <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(1, 1)), 
+                   mean.model = list(armaOrder = c(1, 2), include.mean = FALSE), 
+                   distribution.model = "norm")
+
+model_12_11 <- ugarchfit(spec = model_1211, data = UNRATE_diff)
+model_12_11
+
+res_analysis(model_12_11@fit$residuals)
+```
+
+Residual Analysis for ARMA(1,2) + GARCH(1,1):
+
+1. p-value is less than 0.05 for ar1, ma1, ma2 and beta1. Hence, significant.
+2. For alpha1, p-value is greater than 0.05. Hence, not significant.
+3. In Residual plot, the line is passing through 0. 
+4. From normal distribution curve, qq plot and Shapiro Walk test, we can see normality in the data.
+5. There are no significant lags in Autocorrelation plot.
+6. Ljung box test shows good results as all the dots are above the dotted line.
+
+Therefore, it is not considered as a good model since alpha1 is not significant.
+
+
+ARMA(1,2) + GARCH(6,4):
+
+```{r, echo = FALSE}
+model_1264 <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(4, 6)), 
+                   mean.model = list(armaOrder = c(1, 2), include.mean = FALSE), 
+                   distribution.model = "norm")
+
+model_12_64 <- ugarchfit(spec = model_1264, data = UNRATE_diff)
+model_12_64
+
+res_analysis(model_12_64@fit$residuals)
+```
+
+Residual Analysis for ARMA(1,2) + GARCH(6,4):
+
+1. p-value is less than 0.05 for ar1, ma1,  and alpha1. Hence, significant.
+2. For ma2, alpha2, alpha3, alpha4, beta1, beta2, beta3, beta4, beta5, and beta6, p-value is greater than 0.05. Hence, not significant.
+3. In Residual plot, the line is passing through 0. 
+4. From normal distribution curve, qq plot and Shapiro Walk test, we can see normality in the data.
+5. There are no significant lags in Autocorrelation plot.
+6. Ljung box test shows good results as all the dots are above the dotted line.
+
+Therefore, it is not considered as a good model since there are lot of insignificant values.
+
+```{r, echo = FALSE}
+AICs = c(infocriteria(model_12_10)[1], infocriteria(model_12_11)[1], infocriteria(model_12_64)[1])
+
+BICs = c(infocriteria(model_12_10)[2], infocriteria(model_12_11)[2], infocriteria(model_12_64)[2])
+
+UN = data.frame(model = c("model_12_10", "model_12_11", "model_12_64"))   
+UN$AIC = AICs
+UN$BIC = BICs
+
+UN[order(UN$AIC), ]
+UN[order(UN$BIC), ]
+```
+
+Overall, ARMA(1,2) + GARCH(1,0) model is best compared to others. 
+
+Now we are doing Over-fitting on the best model ARMA(1,2) + GARCH(1,0).
+
+Over-fitting models are,
+
+{ARMA(2, 2) + GARCH(1, 0), ARMA(1, 3) + GARCH(1, 0), 
+ARMA(1, 2) + GARCH(2, 0), ARMA(1, 2) + GARCH(1, 1)}
+
+
+ARMA(2, 2) + GARCH(1, 0):
+
+```{r, echo = FALSE}
+model_2210 <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(0, 1)), 
+                   mean.model = list(armaOrder = c(2, 2), include.mean = FALSE), 
+                   distribution.model = "norm")
+
+model_22_10 <- ugarchfit(spec = model_2210, data = UNRATE_diff)
+model_22_10
+
+res_analysis(model_22_10@fit$residuals)
+```
+
+
+Residual Analysis for ARMA(2,2) + GARCH(1,0):
+
+1. p-value is less than 0.05 for ar1, ma1,  and beta1. Hence, significant.
+2. For ar2 and ma2, p-value is greater than 0.05. Hence, not significant.
+3. In Residual plot, the line is passing through 0. 
+4. From normal distribution curve, qq plot and Shapiro Walk test, we can see normality in the data.
+5. There are no significant lags in Autocorrelation plot.
+6. Ljung box test shows good results as all the dots are above the dotted line.
+
+Therefore, it is not considered as a good model.
+
+
+ARMA(1, 3) + GARCH(1, 0):
+
+```{r, echo = FALSE}
+model_1310 <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(0, 1)), 
+                   mean.model = list(armaOrder = c(1, 3), include.mean = FALSE), 
+                   distribution.model = "norm")
+
+model_13_10 <- ugarchfit(spec = model_1310, data = UNRATE_diff)
+model_13_10
+
+res_analysis(model_13_10@fit$residuals)
+```
+
+
+Residual Analysis for ARMA(1, 3) + GARCH(1, 0):
+
+1. p-value is less than 0.05 for ar1, ma1, ma2  and beta1. Hence, significant.
+2. For ma3, p-value is greater than 0.05. Hence, not significant.
+3. In Residual plot, the line is passing through 0. 
+4. From normal distribution curve, qq plot and Shapiro Walk test, we can see normality in the data.
+5. There are no significant lags in Autocorrelation plot.
+6. Ljung box test shows good results as all the dots are above the dotted line.
+
+Therefore, it is not considered as a good model.
+
+
+
+ARMA(1, 2) + GARCH(2, 0):
+
+```{r, echo = FALSE}
+model_1220 <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(0, 2)), 
+                   mean.model = list(armaOrder = c(1, 2), include.mean = FALSE), 
+                   distribution.model = "norm")
+
+model_12_20 <- ugarchfit(spec = model_1220, data = UNRATE_diff)
+model_12_20
+
+res_analysis(model_12_20@fit$residuals)
+```
+
+Residual Analysis for ARMA(1, 2) + GARCH(2, 0):
+
+1. p-value is less than 0.05 for ar1, ma1, ma2  and beta1. Hence, significant.
+2. For beta2, p-value is greater than 0.05. Hence, not significant.
+3. In Residual plot, the line is passing through 0. 
+4. From normal distribution curve, qq plot and Shapiro Walk test, we can see normality in the data.
+5. There are no significant lags in Autocorrelation plot.
+6. Ljung box test shows good results as all the dots are above the dotted line.
+
+Therefore, it can be considered as a good model.
+
+
+ARMA(1,2) + GARCH(1,1):
+
+```{r, echo = FALSE}
+model_1211 <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(1, 1)), 
+                   mean.model = list(armaOrder = c(1, 2), include.mean = FALSE), 
+                   distribution.model = "norm")
+
+model_12_11 <- ugarchfit(spec = model_1211, data = UNRATE_diff)
+model_12_11
+
+res_analysis(model_12_11@fit$residuals)
+```
+
+Residual Analysis for ARMA(1,2) + GARCH(1,1):
+
+1. p-value is less than 0.05 for ar1, ma1, ma2 and beta1. Hence, significant.
+2. For alpha1, p-value is greater than 0.05. Hence, not significant.
+3. In Residual plot, the line is passing through 0. 
+4. From normal distribution curve, qq plot and Shapiro Walk test, we can see normality in the data.
+5. There are no significant lags in Autocorrelation plot.
+6. Ljung box test shows good results as all the dots are above the dotted line.
+
+Therefore, it is not considered as a good model since alpha1 is not significant.
+
+Overall, ARMA(1,2) + GARCH(1,0) is best model. With this we are going to predict the future unemployment rate of U.S for the next 6 years i.e., till 2027.
+
+```{r}
+UN_FUTURE = ugarchforecast(model_12_10, data = UNRATE_diff, n.ahead = 6)
+
+v_Plot(UN_FUTURE, "Forecast for next 6 years")
+```
+
+From the forecast graph, we can observe a decrease in the unemployment rate over the next 6 years.
+
+## Conclusion
+
+The decrease in the unemployment rate indicates that there will be more employment in US in future.
